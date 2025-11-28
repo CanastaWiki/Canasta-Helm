@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "canasta.fullname" . }}-config
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+data:
+  my.cnf: |
+{{ .Values.config.myCnf | indent 4 }}
+  default.vcl: |
+{{ .Values.config.defaultVcl | indent 4 }}
+  composer.local.json: |
+{{ .Values.config.composerLocalJson | indent 4 }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "canasta.fullname" . }}-env
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+data:
+  MYSQL_PASSWORD: {{ .Values.db.rootPassword | quote }}
+  MW_SITE_SERVER: {{ .Values.web.mediawiki.siteServer | quote }}
+  MW_SITE_FQDN: {{ .Values.global.fqdn | quote }}
+  PHP_UPLOAD_MAX_FILESIZE: {{ .Values.web.php.uploadMaxFilesize | quote }}
+  PHP_POST_MAX_SIZE: {{ .Values.web.php.postMaxSize | quote }}
+  PHP_MAX_INPUT_VARS: {{ .Values.web.php.maxInputVars | quote }}
+  MW_SITEMAP_SUBDIR: {{ .Values.web.mediawiki.sitemapSubdir | quote }}
+  MW_SITEMAP_IDENTIFIER: {{ .Values.web.mediawiki.sitemapIdentifier | quote }}

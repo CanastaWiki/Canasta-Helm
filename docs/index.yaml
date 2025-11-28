@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  canasta:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2025-11-28T17:21:55.218106+05:30"
+    description: A Helm chart for CanastaWiki Kubernetes deployment
+    digest: 6ce9c31eade7f29c4f7f15589b2fd404045f836998b8cdd340f712d66e4e586a
+    name: canasta
+    type: application
+    urls:
+    - canasta-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-11-28T17:21:55.215554+05:30"

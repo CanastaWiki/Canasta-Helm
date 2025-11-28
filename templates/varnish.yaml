@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "canasta.fullname" . }}-varnish
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: varnish
+spec:
+  replicas: {{ .Values.varnish.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "canasta.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: varnish
+  template:
+    metadata:
+      labels:
+        {{- include "canasta.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: varnish
+    spec:
+      containers:
+        - name: varnish
+          image: "{{ .Values.varnish.image.repository }}:{{ .Values.varnish.image.tag }}"
+          imagePullPolicy: {{ .Values.varnish.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            {{- toYaml .Values.varnish.resources | nindent 12 }}
+          volumeMounts:
+            - name: default-vcl-config
+              mountPath: /etc/varnish/default.vcl
+              subPath: default.vcl
+      volumes:
+        - name: default-vcl-config
+          configMap:
+            name: {{ include "canasta.fullname" . }}-config
+            items:
+              - key: "default.vcl"
+                path: "default.vcl"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "canasta.fullname" . }}-varnish
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: varnish
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "canasta.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: varnish
+---
+{{- if .Values.varnish.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "canasta.fullname" . }}-varnish
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: varnish
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "canasta.fullname" . }}-varnish
+  minReplicas: {{ .Values.varnish.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.varnish.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.varnish.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

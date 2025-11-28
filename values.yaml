@@ -1,0 +1,164 @@
+
+global:
+  siteName: "CanastaWiki"
+  fqdn: "localhost"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+persistence:
+  type: pvc
+  hostPath: /canasta/config-data
+
+
+caddy:
+  image:
+    repository: caddy
+    tag: 2.4.6-alpine
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 50
+  persistence:
+    enabled: true
+    size: 1Gi
+
+db:
+  image:
+    repository: mysql
+    tag: "8.0"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  persistence:
+    enabled: true
+    size: 200Mi
+  rootPassword: "mediawiki"
+elasticsearch:
+  image:
+    repository: docker.elastic.co/elasticsearch/elasticsearch
+    tag: 7.10.2
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  persistence:
+    enabled: true
+    size: 1Gi
+  javaOpts: "-Xms512m -Xmx512m"
+
+varnish:
+  image:
+    repository: varnish
+    tag: 7.0.2-alpine
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 50
+
+web:
+  image:
+    repository: ghcr.io/canastawiki/canasta
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 50
+  persistence:
+    sitemap:
+      enabled: true
+      size: 200Mi
+  
+  php:
+    uploadMaxFilesize: "10M"
+    postMaxSize: "10M"
+    maxInputVars: 1000
+
+  mediawiki:
+    siteServer: "https://localhost"
+    sitemapSubdir: ""
+    sitemapIdentifier: "mediawiki"
+
+
+config:
+  myCnf: |
+    [mysqld]
+    default-authentication-plugin=mysql_native_password
+    skip-name-resolve
+    datadir=/var/lib/mysql
+    socket=/var/lib/mysql/mysql.sock
+    secure-file-priv=/var/lib/mysql-files
+    user=mysql
+    pid-file=/var/run/mysqld/mysqld.pid
+    [client]
+    socket=/var/lib/mysql/mysql.sock
+
+  defaultVcl: |
+    vcl 4.0;
+    backend default {
+        .host = "web";
+        .port = "80";
+    }
+
+  composerLocalJson: |
+    {}
+
+# MediaWiki Installation Parameters
+install:
+  enabled: true
+  siteName: "CanastaWiki"
+  adminUser: "admin"
+  adminPassword: "password" # Change this in production!
+  dbUser: "root"
+  dbPassword: "mediawiki"
+  lang: "en"

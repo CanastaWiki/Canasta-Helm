@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "canasta.fullname" . }}-caddy
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: caddy
+spec:
+  replicas: {{ .Values.caddy.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "canasta.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: caddy
+  template:
+    metadata:
+      labels:
+        {{- include "canasta.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: caddy
+    spec:
+      containers:
+        - name: caddy
+          image: "{{ .Values.caddy.image.repository }}:{{ .Values.caddy.image.tag }}"
+          imagePullPolicy: {{ .Values.caddy.image.pullPolicy }}
+          command:
+            - "caddy"
+            - "reverse-proxy"
+            - "--from"
+            - "$(MW_SITE_FQDN)"
+            - "--to"
+            - "{{ include "canasta.fullname" . }}-varnish:80"
+          env:
+            - name: MW_SITE_FQDN
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "canasta.fullname" . }}-env
+                  key: MW_SITE_FQDN
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.caddy.resources | nindent 12 }}
+          volumeMounts:
+            - name: caddy-data
+              mountPath: /data
+      volumes:
+        - name: caddy-data
+          persistentVolumeClaim:
+            claimName: {{ include "canasta.fullname" . }}-caddy-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "canasta.fullname" . }}-caddy
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: caddy
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 443
+      targetPort: https
+      protocol: TCP
+      name: https
+  selector:
+    {{- include "canasta.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: caddy
+---
+{{- if .Values.caddy.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "canasta.fullname" . }}-caddy-data
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: caddy
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.caddy.persistence.size | quote }}
+  {{- if .Values.caddy.persistence.storageClass }}
+  storageClassName: {{ .Values.caddy.persistence.storageClass | quote }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.caddy.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "canasta.fullname" . }}-caddy
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: caddy
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "canasta.fullname" . }}-caddy
+  minReplicas: {{ .Values.caddy.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.caddy.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.caddy.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

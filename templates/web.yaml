@@ -1,0 +1,197 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "canasta.fullname" . }}-web
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.web.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "canasta.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        {{- include "canasta.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+    spec:
+      initContainers:
+        {{- if .Values.install.enabled }}
+        - name: install-mediawiki
+          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              if [ ! -f /mediawiki/config/LocalSettings.php ]; then
+                echo "LocalSettings.php not found. Starting installation..."
+                
+                # Wait for DB
+                until nc -z -v -w30 {{ include "canasta.fullname" . }}-db 3306; do
+                  echo "Waiting for database connection..."
+                  sleep 5
+                done
+                
+                php /var/www/mediawiki/maintenance/install.php \
+                  --confpath /mediawiki/config \
+                  --dbname mw \
+                  --dbport 3306 \
+                  --dbserver {{ include "canasta.fullname" . }}-db \
+                  --dbtype mysql \
+                  --dbuser {{ .Values.install.dbUser }} \
+                  --dbpass {{ .Values.install.dbPassword }} \
+                  --pass {{ .Values.install.adminPassword }} \
+                  --server "{{ .Values.web.mediawiki.siteServer }}" \
+                  --scriptpath "" \
+                  --lang {{ .Values.install.lang }} \
+                  "{{ .Values.install.siteName }}" \
+                  "{{ .Values.install.adminUser }}"
+                
+                echo "Installation complete."
+              else
+                echo "LocalSettings.php found. Skipping installation."
+              fi
+          volumeMounts:
+            - mountPath: /mediawiki/config
+              name: config-volume
+              subPath: config
+        {{- end }}
+      containers:
+        - name: web
+          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "canasta.fullname" . }}-env
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /var/www/mediawiki/w/user-extensions
+              name: config-volume
+              subPath: extensions
+            - mountPath: /var/www/mediawiki/w/user-skins
+              name: config-volume
+              subPath: skins
+            - mountPath: /mediawiki/config
+              name: config-volume
+              subPath: config
+            - mountPath: /mediawiki/config/my.cnf
+              name: canasta-config
+              subPath: my.cnf
+            - mountPath: /mediawiki/config/default.vcl
+              name: canasta-config
+              subPath: default.vcl
+            - mountPath: /mediawiki/config/composer.local.json
+              name: canasta-config
+              subPath: composer.local.json
+            - mountPath: /mediawiki/settings
+              name: canasta-settings
+            - mountPath: /mediawiki/images
+              name: config-volume
+              subPath: images
+            - name: sitemap-data
+              mountPath: /mediawiki/sitemap
+      volumes:
+        - name: canasta-config
+          configMap:
+            name: {{ include "canasta.fullname" . }}-config
+        - name: canasta-settings
+          configMap:
+            name: {{ include "canasta.fullname" . }}-config
+        - name: config-volume
+          {{- if eq .Values.persistence.type "hostPath" }}
+          hostPath:
+            path: {{ .Values.persistence.hostPath }}
+            type: DirectoryOrCreate
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ include "canasta.fullname" . }}-config-data
+          {{- end }}
+        - name: sitemap-data
+          persistentVolumeClaim:
+            claimName: {{ include "canasta.fullname" . }}-sitemap-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "canasta.fullname" . }}-web
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "canasta.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+---
+{{- if .Values.web.persistence.sitemap.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "canasta.fullname" . }}-sitemap-data
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.web.persistence.sitemap.size | quote }}
+  {{- if .Values.web.persistence.sitemap.storageClass }}
+  storageClassName: {{ .Values.web.persistence.sitemap.storageClass | quote }}
+  {{- end }}
+{{- end }}
+---
+{{- if and (ne .Values.persistence.type "hostPath") .Values.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "canasta.fullname" . }}-config-data
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  {{- if .Values.web.persistence.sitemap.storageClass }}
+  storageClassName: {{ .Values.web.persistence.sitemap.storageClass | quote }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.web.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "canasta.fullname" . }}-web
+  labels:
+    {{- include "canasta.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "canasta.fullname" . }}-web
+  minReplicas: {{ .Values.web.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.web.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.web.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

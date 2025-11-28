@@ -1,0 +1,41 @@
+name: Package and Publish Helm Chart
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Chart.yaml'
+      - 'values.yaml'
+      - 'templates/**'
+
+jobs:
+  package-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.11.1
+
+      - name: Package Chart
+        run: |
+          helm package . -d docs
+
+      - name: Update Repo Index
+        run: |
+          helm repo index docs --url https://canastawiki.github.io/Canasta-Helm/
+
+      - name: Commit and Push
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add docs/
+          git commit -m "Update Helm chart package [skip ci]" || exit 0
+          git push
