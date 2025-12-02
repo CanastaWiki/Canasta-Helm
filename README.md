@@ -1,6 +1,6 @@
 # Canasta Helm Chart
 
-This repository hosts the Helm chart for [CanastaWiki](https://github.com/CanastaWiki/Canasta).
+This repository hosts the Helm chart for a classic [Canasta](https://github.com/CanastaWiki/Canasta) stack.
 
 ## Usage
 
