@@ -37,13 +37,13 @@ spec:
           resources:
             {{- toYaml .Values.db.resources | nindent 12 }}
           volumeMounts:
-        - name: initdb-volume
-          mountPath: /docker-entrypoint-initdb.d
-        - name: my-cnf-config
-          mountPath: /etc/my.cnf
-          subPath: my.cnf
-        - name: mysql-data
-          mountPath: /var/lib/mysql
+            - name: initdb-volume
+              mountPath: /docker-entrypoint-initdb.d
+            - name: my-cnf-config
+              mountPath: /etc/my.cnf
+              subPath: my.cnf
+            - name: mysql-data
+              mountPath: /var/lib/mysql
       volumes:
       - name: initdb-volume
         {{- if eq .Values.persistence.type "hostPath" }}
